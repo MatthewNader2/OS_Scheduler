@@ -1,105 +1,152 @@
 #include "headers.h"
+
 // Global variables 
-int num_processes,finished_processes=0;
+int msgq_id;
+int received_processes = 0;
+int finished_processes = 0;
+int process_count = 0;
+int* arrived_arr;
 Queue* Ready_Queue;
-PCB* runningProcess;
+PCB* running_process = NULL;
 
-void startProcess(PCB* p)
-{
-    p->start_time = getClk();
-    p->waiting_time += p->start_time - p->arrival_time;
+void CreateMessageQueue() {
+    key_t keyid = ftok("keyfile", 65);
+    msgq_id = msgget(keyid, 0666 | IPC_CREAT);
     
-
-}
-struct PCB* createProcess()
-{
-
-    message* msg;
-    int rec_val = msgrcv(msgq_id, &msg, sizeof(message), 0, IPC_NOWAIT);
-    if (rec_val == -1)
-    {
-        printf("Error in receive\n");
-        return NULL;
+    if (msgq_id == -1) {
+        perror("Error in creating message queue");
+        exit(-1);
     }
-    else
-    {
-        PCB *newProcess = malloc(sizeof(struct PCB));
-        newProcess->id = msg->id;
-        newProcess->arrival_time = msg->arr_time;
-        newProcess->runtime = msg->runningtime;
-       
+}
+
+
+
+
+
+PCB* Receive_process() {
+    msgbuff message;
+    PCB* rec_process = malloc(sizeof(PCB));
+    // Try to receive a message
+    int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), 0, IPC_NOWAIT);
+    
+    if (rec_val != -1) {
+        received_processes++;
+        printf("Received process: ID=%d, Arrival=%d, Runtime=%d, Priority=%d\n",
+               message.process.id,
+               message.process.arrivaltime,
+               message.process.runningtime,
+               message.process.priority);
+        rec_process->id = message.process.id;
+        rec_process->arrival_time = message.process.arrivaltime;
+        rec_process->priority = message.process.priority;
+        rec_process->runtime = message.process.runningtime;
+        rec_process->waiting_time = 0;
+        rec_process->state = READY; 
+        rec_process->remaining_time = message.process.runningtime;
+    } else {
+        free(rec_process); // Avoid memory leak
+        rec_process = NULL;
+    }
+    return rec_process;
+}
+
+void process_ended(int sig) {
+    printf("Process %d has finished\n", running_process->id);
+    running_process = NULL;
+    finished_processes++;
+}
+
+void HPF() {
+    while (finished_processes < process_count) {
+        signal(SIGUSR1, process_ended);
         
-       // printf("\nMessage received: at time %d\n",getClk());
-        return newProcess;
+        PCB* current_p = Receive_process();
+        while (current_p) {
+            enqueue(Ready_Queue, current_p, current_p->priority);
+            current_p = Receive_process();
+        }
+        
+        if (!running_process && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
+            int pid = fork();
+            if (pid == 0) {
+                execl("./process", "process", NULL);
+            } else if (pid < 0) {
+                perror("Error in fork");
+            }
+        }
     }
 }
-void HPF(){
-    printf("Running HPF algorithm");
-    while(finished_processes < num_processes){
-        while(arrived_processes[getClk()]){
-            PCB* current_p = CreateProcess();
-            while(current_p){
-            arrived_process[getClk()--]
-            push(&Ready_Queue , current_p , current_p->priority)
-            current_p = CreateProcess();
-            }
+
+void SJF() {
+    while (finished_processes < process_count) {
+        signal(SIGUSR1, process_ended);
+        
+        PCB* current_p = Receive_process();
+        while (current_p) {
+            enqueue(Ready_Queue, current_p, current_p->runtime);
+            current_p = Receive_process();
         }
-        if(!runningProcess && !isEmpty(&readyQueue))
-        {
-            runningProcess = peek(&Ready_Queue);
-            pop(&Ready_Queue);
-            // *remainingTime = runningProcess->brust;
-            startProcess(runningProcess);
+        
+        if (!running_process && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
             int pid = fork();
-            if (pid == -1)
-            {
-  	            scanf("error in fork in scheduler\n");
-                kill(getpgrp(), SIGKILL);
-            }
-            if(pid == 0)
-            {
-                printf("%d\n", runningProcess->id);
-                execl("./process","process", NULL);
+            if (pid == 0) {
+                execl("./process", "process", NULL);
+            } else if (pid < 0) {
+                perror("Error in fork");
             }
         }
-        //int currClk = getClk();
-        // if(*remainingTime == 0 && runningProcess)
     }
-};
+}
+int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        printf("Too few arguments to scheduler\n");
+        exit(-1);
+    }
 
-void SJF(){};
-void RR(){};
-int main(int argc, char * argv[])
-{
-    int arrived_processes={2,3,4};
-    int rec_val;
-    int algorthim =1;
-    // algorthim = atoi(argv[1]);
-  
+    Ready_Queue = createQueue(100);
 
-    
-    switch(algorthim){
+    // Initialize clock
+    initClk();
+
+    int algorithm = atoi(argv[0]);
+    process_count = atoi(argv[1]);
+
+    int quantum = 0;
+    if (algorithm == 3) quantum = atoi(argv[3]);
+
+    printf("Scheduler started with:\n");
+    printf("Algorithm: %d\n", algorithm);
+    printf("Process count: %d\n", process_count);
+    if (algorithm == 3) printf("Quantum: %d\n", quantum);
+
+    // Create message queue
+    CreateMessageQueue();
+
+    // Open log file
+    FILE* logfile = fopen("scheduler.log", "w");
+    if (!logfile) {
+        perror("Error opening log file");
+        exit(-1);
+    }
+
+    switch (algorithm) {
         case 1:
             HPF();
             break;
         case 2:
             SJF();
             break;
-        case 3:
-            RR();
-            break;
-
-
+        // case 3:
+        //     RR();
+        //     break;
     }
 
+    // Cleanup
+    fclose(logfile);
+    destroyClk(true);
 
-    
-    // initClk();
-  
-    
-   
-    //upon termination release the clock resources
-    
-    // destroyClk(true);
-     
+    return 0;
 }
+
