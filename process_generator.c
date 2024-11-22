@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, clearResources);
 
     // Initialize message queue
-    key_t keyid = ftok("keyfile", 55);
+    key_t keyid = ftok("keyfile", 65);
     msq_id = msgget(keyid, 0666 | IPC_CREAT);
     if (msq_id == -1) {
         perror("Error in creating the message queue");
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     fgets(buffer, sizeof(buffer), file); // Skip the first line again
     int count = 0;
 
-    while (fscanf(file, "%d\t%d\t%d\t%d", &procs[count].id, &procs[count].arrivaltime, 
+    while (fscanf(file, "%d\t%d\t%d\t%d", &procs[count].id, &procs[count].arrivaltime,
                   &procs[count].runningtime, &procs[count].priority) == 4) {
         count++;
     }
@@ -71,23 +71,28 @@ int main(int argc, char* argv[]) {
     initClk();
 
     // Create scheduler and clock processes
+    // In process_generator.c
     int pid_s = fork();
     if (pid_s == -1) {
         perror("Error in creating scheduler process");
-    } else {
-        char proc_str[10], algo_str[10], time_str[10];
-        snprintf(proc_str, sizeof(proc_str), "%d", Proc_num);
+    } else if (pid_s == 0) {
+        // Child process
+        char algo_str[10], proc_str[10], time_str[10];
         snprintf(algo_str, sizeof(algo_str), "%d", algorithm);
+        snprintf(proc_str, sizeof(proc_str), "%d", Proc_num);
 
         if (algorithm == 3) {
             snprintf(time_str, sizeof(time_str), "%d", timeSlot);
-            execl("./scheduler.out", "scheduler", proc_str, algo_str, time_str, NULL);
+            execl("./scheduler.out", "scheduler", algo_str, proc_str, time_str, NULL);
         } else {
-            execl("./scheduler.out", "scheduler", proc_str, algo_str, NULL);
+            execl("./scheduler.out", "scheduler", algo_str, proc_str, NULL);
         }
+        perror("Error executing scheduler");
+        exit(-1);
     }
+    // Parent process continues
 
-   
+
 
     // Send processes to the scheduler at the appropriate time
     int snd_num = 0;

@@ -1,6 +1,6 @@
 #include "headers.h"
 
-// Global variables 
+// Global variables
 int msgq_id;
 int received_processes = 0;
 int finished_processes = 0;
@@ -12,7 +12,7 @@ PCB* running_process = NULL;
 void CreateMessageQueue() {
     key_t keyid = ftok("keyfile", 65);
     msgq_id = msgget(keyid, 0666 | IPC_CREAT);
-    
+
     if (msgq_id == -1) {
         perror("Error in creating message queue");
         exit(-1);
@@ -28,7 +28,7 @@ PCB* Receive_process() {
     PCB* rec_process = malloc(sizeof(PCB));
     // Try to receive a message
     int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), 0, IPC_NOWAIT);
-    
+
     if (rec_val != -1) {
         received_processes++;
         printf("Received process: ID=%d, Arrival=%d, Runtime=%d, Priority=%d\n",
@@ -41,7 +41,7 @@ PCB* Receive_process() {
         rec_process->priority = message.process.priority;
         rec_process->runtime = message.process.runningtime;
         rec_process->waiting_time = 0;
-        rec_process->state = READY; 
+        rec_process->state = READY;
         rec_process->remaining_time = message.process.runningtime;
     } else {
         free(rec_process); // Avoid memory leak
@@ -58,43 +58,52 @@ void process_ended(int sig) {
 
 void HPF() {
     while (finished_processes < process_count) {
-        signal(SIGUSR1, process_ended);
-        
+        // Receive processes
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue(Ready_Queue, current_p, current_p->priority);
             current_p = Receive_process();
         }
-        
+
         if (!running_process && !isEmptyQ(Ready_Queue)) {
-            running_process = dequeue(Ready_Queue);
-            int pid = fork();
-            if (pid == 0) {
-                execl("./process", "process", NULL);
-            } else if (pid < 0) {
-                perror("Error in fork");
+                running_process = dequeue(Ready_Queue);
+                int pid = fork();
+                if (pid == 0) {
+                    char remaining_time_str[10];
+                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
+                    execl("./process.out", "process", remaining_time_str, NULL);
+                    perror("Error executing process");
+                    exit(-1);
+                } else if (pid < 0) {
+                    perror("Error in fork");
+                } else {
+                    running_process->pid = pid;
+                }
             }
-        }
     }
 }
 
 void SJF() {
     while (finished_processes < process_count) {
         signal(SIGUSR1, process_ended);
-        
+
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue(Ready_Queue, current_p, current_p->runtime);
             current_p = Receive_process();
         }
-        
-        if (!running_process && !isEmptyQ(Ready_Queue)) {
-            running_process = dequeue(Ready_Queue);
-            int pid = fork();
-            if (pid == 0) {
-                execl("./process", "process", NULL);
-            } else if (pid < 0) {
-                perror("Error in fork");
+
+        if (running_process != NULL) {
+            int status;
+            pid_t result = waitpid(running_process->pid, &status, WNOHANG);
+            if (result == -1) {
+                perror("waitpid failed");
+            } else if (result == 0) {
+                // Process still running
+            } else if (result == running_process->pid) {
+                printf("Process %d has finished\n", running_process->id);
+                running_process = NULL;
+                finished_processes++;
             }
         }
     }
@@ -110,8 +119,8 @@ int main(int argc, char* argv[]) {
     // Initialize clock
     initClk();
 
-    int algorithm = atoi(argv[0]);
-    process_count = atoi(argv[1]);
+    int algorithm = atoi(argv[1]);
+    process_count = atoi(argv[2]);
 
     int quantum = 0;
     if (algorithm == 3) quantum = atoi(argv[3]);
@@ -149,4 +158,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
