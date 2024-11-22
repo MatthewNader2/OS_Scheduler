@@ -25,6 +25,8 @@ void terminateProcess(int signum)
 
 int main(int argc, char *argv[])
 {
+    initClk();
+
     // Check if the remaining time is passed as an argument
     if (argc < 2)
     {
@@ -32,59 +34,25 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    remaining_time = atoi(argv[1]);
+    int remaining_time = atoi(argv[1]);
+    int last_time = getClk();
 
-    // Get message queue
-    key_t msgq_key = ftok("keyfile", 65);
-    msgq_id = msgget(msgq_key, 0666 | IPC_CREAT);
-    if (msgq_id == -1)
+    printf("Process %d started at time %d with remaining time %d\n", getpid(), last_time, remaining_time);
+
+    while (remaining_time > 0)
     {
-        perror("Error in creating message queue");
-        exit(-1);
+        int current_time = getClk();
+        if (current_time > last_time)
+        {
+            remaining_time -= current_time - last_time;
+            last_time = current_time;
+            printf("Process %d at time %d, remaining time %d\n", getpid(), current_time, remaining_time);
+        }
+        sleep(1);
     }
 
-    // Install signal handler for termination
-    signal(SIGUSR1, terminateProcess);
-
-    clock_t start_time = getClk();
-    clock_t elapsed_time;
-
-    while (1)
-    {
-        elapsed_time = getClk() - start_time;
-        double cpu_time_used = ((double)elapsed_time) / CLOCKS_PER_SEC;
-        int time_left = remaining_time - (int)cpu_time_used;
-
-        if (time_left <= 0)
-        {
-            // Process has finished execution
-
-            // Send message to scheduler
-            struct msgbuff message;
-            message.mtype = 1; // You can use a specific type if needed
-            message.pid = getpid();
-            message.remaining_time = 0; // Process has finished
-
-            if (msgsnd(msgq_id, &message, sizeof(message) - sizeof(long), !IPC_NOWAIT) == -1)
-            {
-                perror("Error in sending message");
-            }
-
-            printf("Process %d has finished execution.\n", getpid());
-            raise(SIGUSR1);
-        }
-        else
-        {
-            // Optionally, send update to scheduler about remaining time
-            struct msgbuff message;
-            message.mtype = 1;
-            message.pid = getpid();
-            message.remaining_time = time_left;
-
-            if (msgsnd(msgq_id, &message, sizeof(message) - sizeof(long), !IPC_NOWAIT) == -1)
-            {
-                perror("Error in sending message");
-            }
-        }
-    }
+    // Process has finished execution
+    printf("Process %d has finished execution at time %d.\n", getpid(), getClk());
+    destroyClk(false);
+    exit(0);
 }

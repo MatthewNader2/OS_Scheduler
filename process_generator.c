@@ -2,8 +2,6 @@
 
 void clearResources(int);
 
-
-
 int msq_id;
 
 int main(int argc, char* argv[]) {
@@ -17,6 +15,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
+    // Read processes from file
     FILE* file = fopen("processes.txt", "r");
     if (!file) {
         perror("Error opening processes file");
@@ -61,22 +60,26 @@ int main(int argc, char* argv[]) {
         printf("Enter the time slot for Round Robin: ");
         scanf("%d", &timeSlot);
     }
-     int pid_c = fork();
+
+    // Start the clock process
+    int pid_c = fork();
     if (pid_c == -1) {
         perror("Error in creating clock process");
     } else if (pid_c == 0) {
         execl("./clk.out", "clk", NULL);
+        perror("Error executing clock");
+        exit(-1);
     }
 
+    // Initialize clock
     initClk();
 
-    // Create scheduler and clock processes
-    // In process_generator.c
+    // Start the scheduler process
     int pid_s = fork();
     if (pid_s == -1) {
         perror("Error in creating scheduler process");
     } else if (pid_s == 0) {
-        // Child process
+        // Child process - Scheduler
         char algo_str[10], proc_str[10], time_str[10];
         snprintf(algo_str, sizeof(algo_str), "%d", algorithm);
         snprintf(proc_str, sizeof(proc_str), "%d", Proc_num);
@@ -90,24 +93,34 @@ int main(int argc, char* argv[]) {
         perror("Error executing scheduler");
         exit(-1);
     }
+
     // Parent process continues
-
-
 
     // Send processes to the scheduler at the appropriate time
     int snd_num = 0;
     while (snd_num < Proc_num) {
-        if (procs[snd_num].arrivaltime == getClk()) {
+        int current_time = getClk();
+        if (procs[snd_num].arrivaltime <= current_time) {
+            printf("Sending process ID %d at time %d\n", procs[snd_num].id, current_time);
             msgbuff msg;
             msg.mtype = 1;
             msg.process = procs[snd_num];
-            msgsnd(msq_id, &msg, sizeof(msg.process), !IPC_NOWAIT);
+            if (msgsnd(msq_id, &msg, sizeof(msg.process), !IPC_NOWAIT) == -1) {
+                perror("Error in sending message");
+            }
             snd_num++;
+        } else {
+            sleep(1);
         }
     }
 
+    // Wait for the scheduler to finish
     waitpid(pid_s, NULL, 0);
-    destroyClk(true);
+    printf("Scheduler has finished.\n");
+
+    // Clean up resources
+    msgctl(msq_id, IPC_RMID, NULL);
+    destroyClk(false);
     free(procs);
 
     return 0;
@@ -115,6 +128,6 @@ int main(int argc, char* argv[]) {
 
 void clearResources(int signum) {
     msgctl(msq_id, IPC_RMID, NULL);
-    destroyClk(true);
+    destroyClk(false);
     exit(0);
 }

@@ -5,7 +5,6 @@ int msgq_id;
 int received_processes = 0;
 int finished_processes = 0;
 int process_count = 0;
-int* arrived_arr;
 Queue* Ready_Queue;
 PCB* running_process = NULL;
 
@@ -18,10 +17,6 @@ void CreateMessageQueue() {
         exit(-1);
     }
 }
-
-
-
-
 
 PCB* Receive_process() {
     msgbuff message;
@@ -36,7 +31,7 @@ PCB* Receive_process() {
                message.process.arrivaltime,
                message.process.runningtime,
                message.process.priority);
-        rec_process->id = message.process.id;
+        rec_process->pid = message.process.id;
         rec_process->arrival_time = message.process.arrivaltime;
         rec_process->priority = message.process.priority;
         rec_process->runtime = message.process.runningtime;
@@ -51,63 +46,58 @@ PCB* Receive_process() {
 }
 
 void process_ended(int sig) {
-    printf("Process %d has finished\n", running_process->id);
-    running_process = NULL;
-    finished_processes++;
-}
+    int status;
+    pid_t pid;
 
-void HPF() {
-    while (finished_processes < process_count) {
-        // Receive processes
-        PCB* current_p = Receive_process();
-        while (current_p) {
-            enqueue(Ready_Queue, current_p, current_p->priority);
-            current_p = Receive_process();
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (running_process && running_process->pid == pid) {
+            printf("Process %d has finished at time %d.\n", running_process->pid, getClk());
+            running_process->state = FINISHED;
+            running_process = NULL;
+            finished_processes++;
+        } else {
+            printf("Unknown child process with PID %d terminated.\n", pid);
         }
-
-        if (!running_process && !isEmptyQ(Ready_Queue)) {
-                running_process = dequeue(Ready_Queue);
-                int pid = fork();
-                if (pid == 0) {
-                    char remaining_time_str[10];
-                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                    execl("./process.out", "process", remaining_time_str, NULL);
-                    perror("Error executing process");
-                    exit(-1);
-                } else if (pid < 0) {
-                    perror("Error in fork");
-                } else {
-                    running_process->pid = pid;
-                }
-            }
     }
 }
 
 void SJF() {
-    while (finished_processes < process_count) {
-        signal(SIGUSR1, process_ended);
+    signal(SIGCHLD, process_ended); // Set up the signal handler once
 
+    while (finished_processes < process_count) {
+        // Receive any new processes
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue(Ready_Queue, current_p, current_p->runtime);
             current_p = Receive_process();
         }
 
-        if (running_process != NULL) {
-            int status;
-            pid_t result = waitpid(running_process->pid, &status, WNOHANG);
-            if (result == -1) {
-                perror("waitpid failed");
-            } else if (result == 0) {
-                // Process still running
-            } else if (result == running_process->pid) {
-                printf("Process %d has finished\n", running_process->id);
-                running_process = NULL;
-                finished_processes++;
+        // Start a new process if none is running
+        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
+            int pid = fork();
+            if (pid == 0) {
+                // Child process
+                char remaining_time_str[10];
+                sprintf(remaining_time_str, "%d", running_process->runtime);
+                execl("./process.out", "process", remaining_time_str, NULL);
+                perror("Error executing process");
+                exit(-1);
+            } else if (pid < 0) {
+                perror("Error in fork");
+            } else {
+                // Parent process
+                running_process->pid = pid;
+                running_process->state = RUNNING;
+                printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
             }
         }
+
+        // Sleep to prevent busy waiting
+        sleep(1);
     }
 }
+
 int main(int argc, char* argv[]) {
     if (argc < 3) {
         printf("Too few arguments to scheduler\n");
@@ -142,7 +132,7 @@ int main(int argc, char* argv[]) {
 
     switch (algorithm) {
         case 1:
-            HPF();
+            // Implement HPF if needed
             break;
         case 2:
             SJF();
@@ -152,8 +142,13 @@ int main(int argc, char* argv[]) {
         //     break;
     }
 
+    // Wait for any remaining child processes
+    while (wait(NULL) > 0);
+
     // Cleanup
     fclose(logfile);
+    // Clean up message queue
+    msgctl(msgq_id, IPC_RMID, NULL);
     destroyClk(true);
 
     return 0;
