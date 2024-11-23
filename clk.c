@@ -7,6 +7,7 @@
 
 #include "headers.h"
 
+
 int shmid;
 
 /* Clear the resources before exit */
@@ -36,10 +37,11 @@ int main(int argc, char * argv[])
         perror("Error in attaching the shm in clock!");
         exit(-1);
     }
-    *shmaddr = clk; /* initialize shared memory */
+    *shmaddr = 0; /* Reset shared memory to 0 */
     while (1)
     {
         sleep(1);
         (*shmaddr)++;
+        printf("Current Time : %d\n", *shmaddr);
     }
 }

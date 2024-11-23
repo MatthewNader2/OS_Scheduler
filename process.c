@@ -7,25 +7,26 @@
 #include <unistd.h>
 #include <time.h>
 
-int remaining_time;
 int msgq_id;
-
-struct msgbuff
-{
-    long mtype;
-    int pid;
-    int remaining_time;
-};
 
 void terminateProcess(int signum)
 {
     destroyClk(false);
-    raise(SIGKILL);
+    exit(0);
 }
 
 int main(int argc, char *argv[])
 {
     initClk();
+
+    // Create message queue
+    key_t keyid = ftok("keyfile", 65);
+    msgq_id = msgget(keyid, 0666);
+
+    if (msgq_id == -1) {
+        perror("Error in getting message queue in process");
+        exit(-1);
+    }
 
     // Check if the remaining time is passed as an argument
     if (argc < 2)
@@ -53,6 +54,21 @@ int main(int argc, char *argv[])
 
     // Process has finished execution
     printf("Process %d has finished execution at time %d.\n", getpid(), getClk());
+
+    // Send message to scheduler to notify termination
+    termination_msgbuff message;
+    message.mtype = PROCESS_TERMINATION_MSG; // Use a specific message type for process termination
+    message.pid = getpid();
+    message.status = 1; // 1 indicates process has finished
+
+    int send_val = msgsnd(msgq_id, &message, sizeof(message) - sizeof(long), !IPC_NOWAIT);
+
+    if (send_val == -1) {
+        perror("Error in sending termination message from process");
+    } else {
+        printf("Process %d sent termination message to scheduler.\n", getpid());
+    }
+
     destroyClk(false);
     exit(0);
 }

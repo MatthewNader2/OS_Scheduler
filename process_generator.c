@@ -98,21 +98,21 @@ int main(int argc, char* argv[]) {
 
     // Send processes to the scheduler at the appropriate time
     int snd_num = 0;
-    while (snd_num < Proc_num) {
-        int current_time = getClk();
-        if (procs[snd_num].arrivaltime <= current_time) {
-            printf("Sending process ID %d at time %d\n", procs[snd_num].id, current_time);
-            msgbuff msg;
-            msg.mtype = 1;
-            msg.process = procs[snd_num];
-            if (msgsnd(msq_id, &msg, sizeof(msg.process), !IPC_NOWAIT) == -1) {
-                perror("Error in sending message");
+        while (snd_num < Proc_num) {
+            int current_time = getClk();
+            if (procs[snd_num].arrivaltime <= current_time) {
+                printf("Sending process ID %d at time %d\n", procs[snd_num].id, current_time);
+                process_msgbuff msg; // Use process_msgbuff instead of msgbuff
+                msg.mtype = PROCESS_ARRIVAL_MSG; // Use the defined constant
+                msg.process = procs[snd_num];
+                if (msgsnd(msq_id, &msg, sizeof(msg.process), !IPC_NOWAIT) == -1) {
+                    perror("Error in sending message");
+                }
+                snd_num++;
+            } else {
+                sleep(1);
             }
-            snd_num++;
-        } else {
-            sleep(1);
         }
-    }
 
     // Wait for the scheduler to finish
     waitpid(pid_s, NULL, 0);
