@@ -49,7 +49,6 @@ int main(int argc, char *argv[])
             last_time = current_time;
             printf("Process %d at time %d, remaining time %d\n", getpid(), current_time, remaining_time);
         }
-        sleep(1);
     }
 
     // Process has finished execution

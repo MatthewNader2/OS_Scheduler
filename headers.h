@@ -14,8 +14,13 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+#include <string.h>
+#include <math.h>
+#include <stdbool.h>  // For standard bool, true, false
 
-typedef short bool;
+
+
+// typedef short bool;
 #define true 1
 #define false 0
 
@@ -101,7 +106,7 @@ typedef struct {
     int pid;                 // Process ID
     int arrival_time;       // When the process arrives
     int runtime;           // Total CPU time needed
-    int priority;          // Process priority (0-10, 0 is highest)
+    int priority;          // Process priority (lower number means higher priority)
     int remaining_time;    // Remaining CPU time needed
     int waiting_time;      // Total time spent waiting
     int start_time;        // When process first started
@@ -144,9 +149,46 @@ int isEmptyQ(Queue* queue) {
     return (queue->size == 0);
 }
 
-// Function to add an item to the queue.
-// It changes rear and size
+// Enqueue function for HPF (Priority Queue)
+// Processes are ordered based on priority (lower number means higher priority)
 void enqueue(Queue* queue, PCB* item) {
+    if (isFull(queue)) {
+        printf("Queue is full. Cannot enqueue item.\n");
+        return;
+    }
+
+    int i;
+
+    // If the queue is empty, insert at position 0
+    if (queue->size == 0) {
+        queue->array[0] = item;
+        queue->front = 0;
+        queue->rear = 0;
+        queue->size = 1;
+        return;
+    }
+
+    // Start from the last element and shift items to the right to make room
+    i = queue->size - 1;
+
+    // Adjust the condition based on priority and arrival time
+    while (i >= 0 && (queue->array[i]->priority > item->priority ||
+          (queue->array[i]->priority == item->priority && queue->array[i]->arrival_time > item->arrival_time))) {
+        queue->array[i + 1] = queue->array[i];
+        i--;
+    }
+
+    // Insert the new item at the correct position
+    queue->array[i + 1] = item;
+
+    // Update rear and size
+    queue->size++;
+    queue->rear = queue->size - 1;
+}
+
+// Enqueue function for SJF
+// Processes are ordered based on remaining time
+void enqueue_SJF(Queue* queue, PCB* item) {
     if (isFull(queue)) {
         printf("Queue is full. Cannot enqueue item.\n");
         return;
@@ -178,6 +220,19 @@ void enqueue(Queue* queue, PCB* item) {
     // Update rear and size
     queue->size++;
     queue->rear = queue->size - 1;
+}
+
+// Enqueue function for RR
+// Processes are enqueued in FCFS order
+void enqueue_RR(Queue* queue, PCB* item) {
+    if (isFull(queue)) {
+        printf("Queue is full. Cannot enqueue item.\n");
+        return;
+    }
+
+    queue->rear = (queue->rear + 1) % queue->capacity;
+    queue->array[queue->rear] = item;
+    queue->size++;
 }
 
 // Function to remove an item from queue.
