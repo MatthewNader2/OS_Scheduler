@@ -14,12 +14,19 @@ void terminateProcess(int signum)
     destroyClk(false);
     exit(0);
 }
+int last_time;
+
+void cont (int);
 
 int main(int argc, char *argv[])
 {
     initClk();
 
+
+    signal(SIGCONT,cont);
     // Create message queue
+
+
     key_t keyid = ftok("keyfile", 65);
     msgq_id = msgget(keyid, 0666);
 
@@ -36,7 +43,7 @@ int main(int argc, char *argv[])
     }
 
     int remaining_time = atoi(argv[1]);
-    int last_time = getClk();
+    last_time = getClk();
 
     printf("Process %d started at time %d with remaining time %d\n", getpid(), last_time, remaining_time);
 
@@ -54,6 +61,9 @@ int main(int argc, char *argv[])
     // Process has finished execution
     printf("Process %d has finished execution at time %d.\n", getpid(), getClk());
 
+
+
+
     // Send message to scheduler to notify termination
     termination_msgbuff message;
     message.mtype = PROCESS_TERMINATION_MSG; // Use a specific message type for process termination
@@ -70,4 +80,10 @@ int main(int argc, char *argv[])
 
     destroyClk(false);
     exit(0);
+}
+void cont(int signum)
+{
+
+    last_time=getClk();
+    printf("TTTTTTTTime %d \n",last_time);
 }

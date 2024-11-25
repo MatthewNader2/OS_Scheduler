@@ -1,4 +1,5 @@
 #include "headers.h"
+#include <signal.h>
 
 // Global variables
 int msgq_id;
@@ -171,7 +172,7 @@ void HPF() {
             PCB* highest_priority_process = front(Ready_Queue);
             if (highest_priority_process->priority < running_process->priority) {
                 // Preempt running process
-                printf("Preempting process %d at time %d.\n", running_process->pid, getClk());
+                printf("Preempting process %d at time %d, remaing time = %d\n", running_process->pid, running_process->remaining_time,getClk());
                 // Send SIGSTOP to running process
                 kill(running_process->pid, SIGSTOP);
 
@@ -181,6 +182,7 @@ void HPF() {
                 running_process->remaining_time -= elapsed_time;
                 running_process->state = BLOCKED;
 
+                printf(" remaing time = %d\n",running_process->remaining_time);
                 // Log the process stop
                 Log_Process_Event(running_process, "stopped");
 
@@ -196,7 +198,7 @@ void HPF() {
                         // Child process
                         char remaining_time_str[10];
                         sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                        execl("./process.out", "process", remaining_time_str, NULL);
+                        execl("./process", "process", remaining_time_str, NULL);
                         perror("Error executing process");
                         exit(-1);
                     } else if (pid < 0) {
@@ -235,7 +237,9 @@ void HPF() {
                     // Child process
                     char remaining_time_str[10];
                     sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                    execl("./process.out", "process", remaining_time_str, NULL);
+
+                    printf("getclk :  %d\n", getClk());
+                    execl("./process", "process", remaining_time_str, NULL);
                     perror("Error executing process");
                     exit(-1);
                 } else if (pid < 0) {
@@ -256,16 +260,16 @@ void HPF() {
                 kill(running_process->pid, SIGCONT);
                 running_process->state = RUNNING;
                 running_process->last_run = getClk();
-                printf("Process %d resumed at time %d.\n", running_process->pid, getClk());
+                printf("Process %d resumed at time %d, remaing time:%d\n", running_process->pid, getClk(),running_process->remaining_time);
 
                 // Log the process resume
                 Log_Process_Event(running_process, "resumed");
             }
         }
 
-        // Sleep to prevent busy waiting
-        sleep(1);
-    }
+        // Sleep to eeprevent busy waiting
+        // sleep(1);
+        }
 }
 
 void SJF() {
@@ -288,7 +292,7 @@ void SJF() {
                 // Child process
                 char remaining_time_str[10];
                 sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                execl("./process.out", "process", remaining_time_str, NULL);
+                execl("./process", "process", remaining_time_str, NULL);
                 perror("Error executing process");
                 exit(-1);
             } else if (pid < 0) {
@@ -307,7 +311,7 @@ void SJF() {
         }
 
         // Sleep to prevent busy waiting
-        sleep(1);
+        // sleep(1);
     }
 }
 
@@ -337,6 +341,7 @@ void RR(int quantum) {
                 if (running_process->remaining_time <= 0) {
                     // Process has finished, but it will notify us
                     printf("Process %d has finished execution.\n", running_process->pid);
+                    printf("Finished Processes : %d",finished_processes);
                 } else {
                     // Update process state
                     running_process->state = BLOCKED;
@@ -360,7 +365,7 @@ void RR(int quantum) {
                     // Child process
                     char remaining_time_str[10];
                     sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                    execl("./process.out", "process", remaining_time_str, NULL);
+                    execl("./process", "process", remaining_time_str, NULL);
                     perror("Error executing process");
                     exit(-1);
                 } else if (pid < 0) {
@@ -387,8 +392,8 @@ void RR(int quantum) {
                 Log_Process_Event(running_process, "resumed");
             }
         }
+sleep(1);
 
-        sleep(1);
     }
 }
 
