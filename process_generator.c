@@ -101,9 +101,10 @@ int main(int argc, char* argv[]) {
     while (snd_num < Proc_num) {
         int current_time = getClk();
         if (procs[snd_num].arrivaltime <= current_time) {
-            // printf("Sending process ID %d at time %d\n", procs[snd_num].id, current_time);
+            printf("Sending process ID %d at time %d\n", procs[snd_num].id, current_time);
+            
             process_msgbuff msg; // Use process_msgbuff instead of msgbuff
-            msg.mtype = PROCESS_ARRIVAL_MSG; // Use the defined constant
+            msg.mtype = 1; // Use the defined constant
             msg.process = procs[snd_num];
             if (msgsnd(msq_id, &msg, sizeof(msg.process), !IPC_NOWAIT) == -1) {
                 perror("Error in sending message");
@@ -116,7 +117,7 @@ int main(int argc, char* argv[]) {
 
     // Wait for the scheduler to finish
     waitpid(pid_s, NULL, 0);
-    printf("Scheduler has finished.\n");
+    // printf("Scheduler has finished.\n");
 
     // Clean up resources
     msgctl(msq_id, IPC_RMID, NULL);

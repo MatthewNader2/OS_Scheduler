@@ -59,7 +59,7 @@ void Log_Process_Event(PCB* process, const char* state) {
 
 void Check_Process_Termination() {
     termination_msgbuff message;
-    int rec_val = msgrcv(msgq_id, &message, sizeof(message) - sizeof(long), PROCESS_TERMINATION_MSG, IPC_NOWAIT);
+    int rec_val = msgrcv(msgq_id, &message, sizeof(message) - sizeof(long), 5, IPC_NOWAIT);
 
     if (rec_val != -1) {
         // Process has notified termination
@@ -96,12 +96,13 @@ PCB* Receive_process() {
     process_msgbuff message;
     PCB* rec_process = malloc(sizeof(PCB));
  
-    int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), PROCESS_ARRIVAL_MSG, IPC_NOWAIT);
+    int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), 1, IPC_NOWAIT);
 
     if (rec_val != -1) {
         if (received_processes==0){
             first_arr_proc=message.process.arrivaltime;
         }
+        // printf("%d\n", getClk());
         received_processes++;
      
         rec_process->id = message.process.id;
@@ -275,9 +276,9 @@ void HPF() {
                 Log_Process_Event(running_process, "resumed");
             }
         }
-        if(running_process){
-            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        }
+        // if(running_process){
+        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        // }
         // Receive any new processes
         PCB* current_p = Receive_process();
         while (current_p) {
@@ -350,7 +351,7 @@ void HPF() {
        
         
         // Sleep to eeprevent busy waiting
-        sleep(1);
+        // sleep(1);
        
         
     }
@@ -358,9 +359,11 @@ void HPF() {
 
 void SJF() {
     while (finished_processes < process_count) {
-        if(running_process){
-            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        }
+        // if(running_process){
+        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        // }
+
+
         // Receive any new processes
         PCB* current_p = Receive_process();
         while (current_p) {
@@ -399,15 +402,17 @@ void SJF() {
        
 
       
-        sleep(1);
+        // sleep(1);
     }
 }
 
 void RR(int quantum) {
     while (finished_processes < process_count) {
-        if(running_process){
-            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        }
+        // if(running_process){
+        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        // }
+
+
         // Receive any new processes
         PCB* current_p = Receive_process();
         while (current_p) {

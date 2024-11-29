@@ -20,12 +20,11 @@
 
 
 
-// typedef short bool;
-#define true 1
-#define false 0
 
-#define PROCESS_ARRIVAL_MSG 1
-#define PROCESS_TERMINATION_MSG 5
+
+
+
+
 
 #define SHKEY 300
 

@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 
     // Send message to scheduler to notify termination
     termination_msgbuff message;
-    message.mtype = PROCESS_TERMINATION_MSG; // Use a specific message type for process termination
+    message.mtype = 5; 
     message.pid = getpid();
     message.status = 1; // 1 indicates process has finished
 
