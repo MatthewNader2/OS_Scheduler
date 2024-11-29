@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
         {
             remaining_time -= current_time - last_time;
             last_time = current_time;
-            printf("Process %d at time %d, remaining time %d\n", getpid(), current_time, remaining_time);
+            // printf("Process %d at time %d, remaining time %d\n", getpid(), current_time, remaining_time);
         }
     }
 
@@ -85,5 +85,5 @@ void cont(int signum)
 {
 
     last_time=getClk();
-    printf("TTTTTTTTime %d \n",last_time);
+    
 }

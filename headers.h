@@ -103,15 +103,16 @@ typedef enum {
 
 // Process Control Block structure
 typedef struct {
-    int pid;                 // Process ID
-    int arrival_time;       // When the process arrives
-    int runtime;           // Total CPU time needed
-    int priority;          // Process priority (lower number means higher priority)
-    int remaining_time;    // Remaining CPU time needed
-    int waiting_time;      // Total time spent waiting
-    int start_time;        // When process first started
-    ProcessState state;    // Current state of the process
-    int last_run;         // Last time the process was running
+    int pid;                 
+    int arrival_time;      
+    int runtime;           
+    int priority;          
+    int remaining_time;    
+    int waiting_time;      
+    int start_time;        
+    ProcessState state;    
+    int last_run;
+    int id;         
 } PCB;
 
 //----------------------queue---------------------------------

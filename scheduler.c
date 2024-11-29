@@ -6,6 +6,7 @@ int msgq_id;
 int received_processes = 0;
 int finished_processes = 0;
 int process_count = 0;
+int first_arr_proc;
 Queue* Ready_Queue;
 PCB* running_process = NULL;
 FILE* logfile;
@@ -40,10 +41,10 @@ void Log_Process_Event(PCB* process, const char* state) {
         WTA = ((int)(WTA * 100 + 0.5)) / 100.0; // Round to 2 decimal places
 
         fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d TA %d WTA %.2f\n",
-                time, process->pid, state, arr, total, remain, wait, TA, WTA);
+                time, process->id , state, arr, total, remain, wait, TA, WTA);
     } else {
         fprintf(logfile, "At time %d process %d %s arr %d total %d remain %d wait %d\n",
-                time, process->pid, state, arr, total, remain, wait);
+                time, process->id, state, arr, total, remain, wait);
     }
 
     fflush(logfile); // Ensure that the data is written to the file
@@ -55,10 +56,10 @@ void Check_Process_Termination() {
 
     if (rec_val != -1) {
         // Process has notified termination
-        printf("Scheduler received termination message from process with PID %d.\n", message.pid);
+        // printf("Scheduler received termination message from process with PID %d.\n", message.pid);
 
         if (running_process && running_process->pid == message.pid) {
-            printf("Process %d has finished at time %d.\n", running_process->pid, getClk());
+            // printf("Process %d has finished at time %d.\n", running_process->id, getClk());
             running_process->state = FINISHED;
 
             // Log the process finish
@@ -78,7 +79,7 @@ void Check_Process_Termination() {
             running_process = NULL;
             finished_processes++;
         } else {
-            printf("Unknown process with PID %d reported termination.\n", message.pid);
+            // printf("Unknown process with PID %d reported termination.\n", message.pid);
         }
     }
 }
@@ -91,14 +92,17 @@ PCB* Receive_process() {
     int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), PROCESS_ARRIVAL_MSG, IPC_NOWAIT);
 
     if (rec_val != -1) {
+        if (received_processes==0){
+            first_arr_proc=message.process.arrivaltime;
+        }
         received_processes++;
-        printf("Received process: ID=%d, Arrival=%d, Runtime=%d, Priority=%d, At Time: %d\n",
-               message.process.id,
-               message.process.arrivaltime,
-               message.process.runningtime,
-               message.process.priority,
-               getClk());
-        rec_process->pid = message.process.id;
+        // printf("Received process: ID=%d, Arrival=%d, Runtime=%d, Priority=%d, At Time: %d\n",
+            //    message.process.id,
+            //    message.process.arrivaltime,
+            //    message.process.runningtime,
+            //    message.process.priority,
+            //    getClk());
+        rec_process->id = message.process.id;
         rec_process->arrival_time = message.process.arrivaltime;
         rec_process->priority = message.process.priority;
         rec_process->runtime = message.process.runningtime;
@@ -128,7 +132,7 @@ void ComputePerformanceMetrics() {
         exit(-1);
     }
 
-    int total_time = getClk() - 1; // Total simulation time
+    int total_time = getClk() - first_arr_proc; 
     float cpu_utilization = ((float)total_runtime / total_time) * 100;
     cpu_utilization = Round(cpu_utilization);
 
@@ -172,7 +176,7 @@ void HPF() {
             PCB* highest_priority_process = front(Ready_Queue);
             if (highest_priority_process->priority < running_process->priority) {
                 // Preempt running process
-                printf("Preempting process %d at time %d, remaing time = %d\n", running_process->pid, running_process->remaining_time,getClk());
+                // printf("Preempting process %d at time %d, remaing time = %d\n", running_process->id, running_process->remaining_time,getClk());
                 // Send SIGSTOP to running process
                 kill(running_process->pid, SIGSTOP);
 
@@ -182,7 +186,7 @@ void HPF() {
                 running_process->remaining_time -= elapsed_time;
                 running_process->state = BLOCKED;
 
-                printf(" remaing time = %d\n",running_process->remaining_time);
+                // printf(" remaing time = %d\n",running_process->remaining_time);
                 // Log the process stop
                 Log_Process_Event(running_process, "stopped");
 
@@ -209,7 +213,7 @@ void HPF() {
                         running_process->state = RUNNING;
                         running_process->start_time = getClk();
                         running_process->last_run = getClk();
-                        printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
+                        // printf("Process %d started with PID %d at time %d.\n", running_process->id, pid, getClk());
 
                         // Log the process start
                         Log_Process_Event(running_process, "started");
@@ -219,7 +223,7 @@ void HPF() {
                     kill(running_process->pid, SIGCONT);
                     running_process->state = RUNNING;
                     running_process->last_run = getClk();
-                    printf("Process %d resumed at time %d.\n", running_process->pid, getClk());
+                    // printf("Process %d resumed at time %d.\n", running_process->id, getClk());
 
                     // Log the process resume
                     Log_Process_Event(running_process, "resumed");
@@ -238,7 +242,7 @@ void HPF() {
                     char remaining_time_str[10];
                     sprintf(remaining_time_str, "%d", running_process->remaining_time);
 
-                    printf("getclk :  %d\n", getClk());
+                    // printf("getclk :  %d\n", getClk());
                     execl("./process", "process", remaining_time_str, NULL);
                     perror("Error executing process");
                     exit(-1);
@@ -250,7 +254,7 @@ void HPF() {
                     running_process->state = RUNNING;
                     running_process->start_time = getClk();
                     running_process->last_run = getClk();
-                    printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
+                    // printf("Process %d started with PID %d at time %d.\n", running_process->id, pid, getClk());
 
                     // Log the process start
                     Log_Process_Event(running_process, "started");
@@ -260,7 +264,7 @@ void HPF() {
                 kill(running_process->pid, SIGCONT);
                 running_process->state = RUNNING;
                 running_process->last_run = getClk();
-                printf("Process %d resumed at time %d, remaing time:%d\n", running_process->pid, getClk(),running_process->remaining_time);
+                // printf("Process %d resumed at time %d, remaing time:%d\n", running_process->id, getClk(),running_process->remaining_time);
 
                 // Log the process resume
                 Log_Process_Event(running_process, "resumed");
