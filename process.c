@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     int remaining_time = atoi(argv[1]);
     last_time = getClk();
 
-    printf("Process %d started at time %d with remaining time %d\n", getpid(), last_time, remaining_time);
+    // printf("Process %d started at time %d with remaining time %d\n", getpid(), last_time, remaining_time);
 
     while (remaining_time > 0)
     {
@@ -58,8 +58,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Process has finished execution
-    printf("Process %d has finished execution at time %d.\n", getpid(), getClk());
+    // // Process has finished execution
+    // printf("Process %d has finished execution at time %d.\n", getpid(), getClk());
 
 
 

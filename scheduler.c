@@ -11,12 +11,19 @@ Queue* Ready_Queue;
 PCB* running_process = NULL;
 FILE* logfile;
 
-// Variables for performance metrics
+
+// Variables for performance 
 float total_runtime = 0;
 float total_TA = 0;
 float total_WTA = 0;
 float total_waiting_time = 0;
-float* WTA_values;  // This will be initialized after process_count is known
+float* WTA_values;  
+
+
+
+void HPF();
+void SJF();
+void RR(int quantum);
 
 void CreateMessageQueue() {
     key_t keyid = ftok("keyfile", 65);
@@ -61,7 +68,7 @@ void Check_Process_Termination() {
         if (running_process && running_process->pid == message.pid) {
             // printf("Process %d has finished at time %d.\n", running_process->id, getClk());
             running_process->state = FINISHED;
-
+            running_process->remaining_time=0;
             // Log the process finish
             Log_Process_Event(running_process, "finished");
 
@@ -79,7 +86,7 @@ void Check_Process_Termination() {
             running_process = NULL;
             finished_processes++;
         } else {
-            // printf("Unknown process with PID %d reported termination.\n", message.pid);
+            printf("Unknown process with PID %d reported termination.\n", message.pid);
         }
     }
 }
@@ -88,7 +95,7 @@ void Check_Process_Termination() {
 PCB* Receive_process() {
     process_msgbuff message;
     PCB* rec_process = malloc(sizeof(PCB));
-    // Try to receive a message of type PROCESS_ARRIVAL_MSG (process arrival)
+ 
     int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), PROCESS_ARRIVAL_MSG, IPC_NOWAIT);
 
     if (rec_val != -1) {
@@ -96,12 +103,7 @@ PCB* Receive_process() {
             first_arr_proc=message.process.arrivaltime;
         }
         received_processes++;
-        // printf("Received process: ID=%d, Arrival=%d, Runtime=%d, Priority=%d, At Time: %d\n",
-            //    message.process.id,
-            //    message.process.arrivaltime,
-            //    message.process.runningtime,
-            //    message.process.priority,
-            //    getClk());
+     
         rec_process->id = message.process.id;
         rec_process->arrival_time = message.process.arrivaltime;
         rec_process->priority = message.process.priority;
@@ -159,247 +161,6 @@ void ComputePerformanceMetrics() {
     fclose(perf_file);
 }
 
-void HPF() {
-    while (finished_processes < process_count) {
-        // Receive any new processes
-        PCB* current_p = Receive_process();
-        while (current_p) {
-            enqueue(Ready_Queue, current_p); // Enqueue based on priority
-            current_p = Receive_process();
-        }
-
-        // Check for any processes that have terminated
-        Check_Process_Termination();
-
-        // Check for preemption
-        if (running_process != NULL && !isEmptyQ(Ready_Queue)) {
-            PCB* highest_priority_process = front(Ready_Queue);
-            if (highest_priority_process->priority < running_process->priority) {
-                // Preempt running process
-                // printf("Preempting process %d at time %d, remaing time = %d\n", running_process->id, running_process->remaining_time,getClk());
-                // Send SIGSTOP to running process
-                kill(running_process->pid, SIGSTOP);
-
-                // Update running process's state and remaining time
-                int current_time = getClk();
-                int elapsed_time = current_time - running_process->last_run;
-                running_process->remaining_time -= elapsed_time;
-                running_process->state = BLOCKED;
-
-                // printf(" remaing time = %d\n",running_process->remaining_time);
-                // Log the process stop
-                Log_Process_Event(running_process, "stopped");
-
-                // Enqueue running process back to Ready Queue
-                enqueue(Ready_Queue, running_process);
-
-                // Dequeue the highest priority process and start it
-                running_process = dequeue(Ready_Queue);
-                if (running_process->state == READY) {
-                    // Start the process
-                    int pid = fork();
-                    if (pid == 0) {
-                        // Child process
-                        char remaining_time_str[10];
-                        sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                        execl("./process", "process", remaining_time_str, NULL);
-                        perror("Error executing process");
-                        exit(-1);
-                    } else if (pid < 0) {
-                        perror("Error in fork");
-                    } else {
-                        // Parent process
-                        running_process->pid = pid;
-                        running_process->state = RUNNING;
-                        running_process->start_time = getClk();
-                        running_process->last_run = getClk();
-                        // printf("Process %d started with PID %d at time %d.\n", running_process->id, pid, getClk());
-
-                        // Log the process start
-                        Log_Process_Event(running_process, "started");
-                    }
-                } else if (running_process->state == BLOCKED) {
-                    // Resume the process
-                    kill(running_process->pid, SIGCONT);
-                    running_process->state = RUNNING;
-                    running_process->last_run = getClk();
-                    // printf("Process %d resumed at time %d.\n", running_process->id, getClk());
-
-                    // Log the process resume
-                    Log_Process_Event(running_process, "resumed");
-                }
-            }
-        }
-
-        // If no process is running
-        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
-            running_process = dequeue(Ready_Queue);
-            if (running_process->state == READY) {
-                // Start the process
-                int pid = fork();
-                if (pid == 0) {
-                    // Child process
-                    char remaining_time_str[10];
-                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
-
-                    // printf("getclk :  %d\n", getClk());
-                    execl("./process", "process", remaining_time_str, NULL);
-                    perror("Error executing process");
-                    exit(-1);
-                } else if (pid < 0) {
-                    perror("Error in fork");
-                } else {
-                    // Parent process
-                    running_process->pid = pid;
-                    running_process->state = RUNNING;
-                    running_process->start_time = getClk();
-                    running_process->last_run = getClk();
-                    // printf("Process %d started with PID %d at time %d.\n", running_process->id, pid, getClk());
-
-                    // Log the process start
-                    Log_Process_Event(running_process, "started");
-                }
-            } else if (running_process->state == BLOCKED) {
-                // Resume the process
-                kill(running_process->pid, SIGCONT);
-                running_process->state = RUNNING;
-                running_process->last_run = getClk();
-                // printf("Process %d resumed at time %d, remaing time:%d\n", running_process->id, getClk(),running_process->remaining_time);
-
-                // Log the process resume
-                Log_Process_Event(running_process, "resumed");
-            }
-        }
-
-        // Sleep to eeprevent busy waiting
-        // sleep(1);
-        }
-}
-
-void SJF() {
-    while (finished_processes < process_count) {
-        // Receive any new processes
-        PCB* current_p = Receive_process();
-        while (current_p) {
-            enqueue_SJF(Ready_Queue, current_p); // Enqueue based on remaining time
-            current_p = Receive_process();
-        }
-
-        // Check for any processes that have terminated
-        Check_Process_Termination();
-
-        // Start a new process if none is running
-        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
-            running_process = dequeue(Ready_Queue);
-            int pid = fork();
-            if (pid == 0) {
-                // Child process
-                char remaining_time_str[10];
-                sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                execl("./process", "process", remaining_time_str, NULL);
-                perror("Error executing process");
-                exit(-1);
-            } else if (pid < 0) {
-                perror("Error in fork");
-            } else {
-                // Parent process
-                running_process->pid = pid;
-                running_process->state = RUNNING;
-                running_process->start_time = getClk();
-                running_process->last_run = getClk();
-                printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
-
-                // Log the process start
-                Log_Process_Event(running_process, "started");
-            }
-        }
-
-        // Sleep to prevent busy waiting
-        // sleep(1);
-    }
-}
-
-void RR(int quantum) {
-    while (finished_processes < process_count) {
-        // Receive any new processes
-        PCB* current_p = Receive_process();
-        while (current_p) {
-            enqueue_RR(Ready_Queue, current_p); // Enqueue in FCFS order
-            current_p = Receive_process();
-        }
-
-        // Check for any processes that have terminated
-        Check_Process_Termination();
-
-        int current_time = getClk();
-
-        // Check if time quantum has expired for the running process
-        if (running_process != NULL) {
-            int elapsed_time = current_time - running_process->last_run;
-            if (elapsed_time >= quantum) {
-                // Time quantum expired
-                // Stop the current running process
-                kill(running_process->pid, SIGSTOP);
-                // Update remaining time
-                running_process->remaining_time -= elapsed_time;
-                if (running_process->remaining_time <= 0) {
-                    // Process has finished, but it will notify us
-                    printf("Process %d has finished execution.\n", running_process->pid);
-                    printf("Finished Processes : %d",finished_processes);
-                } else {
-                    // Update process state
-                    running_process->state = BLOCKED;
-                    // Re-enqueue the process
-                    enqueue_RR(Ready_Queue, running_process);
-
-                    // Log the process stop
-                    Log_Process_Event(running_process, "stopped");
-                }
-                running_process = NULL;
-            }
-        }
-
-        // Start a new process if none is running
-        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
-            running_process = dequeue(Ready_Queue);
-            if (running_process->state == READY) {
-                // Start the process
-                int pid = fork();
-                if (pid == 0) {
-                    // Child process
-                    char remaining_time_str[10];
-                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
-                    execl("./process", "process", remaining_time_str, NULL);
-                    perror("Error executing process");
-                    exit(-1);
-                } else if (pid < 0) {
-                    perror("Error in fork");
-                } else {
-                    // Parent process
-                    running_process->pid = pid;
-                    running_process->state = RUNNING;
-                    running_process->start_time = getClk();
-                    running_process->last_run = getClk();
-                    printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
-
-                    // Log the process start
-                    Log_Process_Event(running_process, "started");
-                }
-            } else if (running_process->state == BLOCKED) {
-                // Resume the process
-                kill(running_process->pid, SIGCONT);
-                running_process->state = RUNNING;
-                running_process->last_run = getClk();
-                printf("Process %d resumed at time %d.\n", running_process->pid, getClk());
-
-                // Log the process resume
-                Log_Process_Event(running_process, "resumed");
-            }
-        }
-sleep(1);
-
-    }
-}
 
 int main(int argc, char* argv[]) {
     if (argc < 3) {
@@ -456,13 +217,13 @@ int main(int argc, char* argv[]) {
             exit(-1);
     }
 
-    // Wait for any remaining child processes
-    while (wait(NULL) > 0);
+    // // Wait for any remaining child processes
+    // while (wait(NULL) > 0);
 
-    // Compute performance metrics and write to scheduler.perf
+  
     ComputePerformanceMetrics();
-
-    // Cleanup
+    printf("The Scheduling is ended..\n");
+    // Cleaning
     fclose(logfile);
     free(WTA_values);
     // Clean up message queue
@@ -471,3 +232,256 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+
+
+void HPF() {
+    while (finished_processes < process_count) {
+         if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
+            if (running_process->state == READY) {
+                // Start the process
+                int pid = fork();
+                if (pid == 0) {
+                    // Child process
+                    char remaining_time_str[10];
+                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
+
+                    // printf("getclk :  %d\n", getClk());
+                    execl("./process", "process", remaining_time_str, NULL);
+                    perror("Error executing process");
+                    exit(-1);
+                } else if (pid < 0) {
+                    perror("Error in fork");
+                } else {
+                    // Parent process
+                    running_process->pid = pid;
+                    running_process->state = RUNNING;
+                    running_process->start_time = getClk();
+                    running_process->last_run = getClk();
+                    // printf("Process %d started with PID %d at time %d.\n", running_process->id, pid, getClk());
+
+                    // Log the process start
+                    Log_Process_Event(running_process, "started");
+                }
+            } else if (running_process->state == BLOCKED) {
+                // Resume the process
+                kill(running_process->pid, SIGCONT);
+                running_process->state = RUNNING;
+                running_process->last_run = getClk();
+                // printf("Process %d resumed at time %d, remaing time:%d\n", running_process->id, getClk(),running_process->remaining_time);
+
+                // Log the process resume
+                Log_Process_Event(running_process, "resumed");
+            }
+        }
+        if(running_process){
+            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        }
+        // Receive any new processes
+        PCB* current_p = Receive_process();
+        while (current_p) {
+            enqueue(Ready_Queue, current_p); // Enqueue based on priority
+            current_p = Receive_process();
+        }
+
+        // Check for any processes that have terminated
+        Check_Process_Termination();
+
+        // Check for preemption
+        if (running_process != NULL && !isEmptyQ(Ready_Queue)) {
+            PCB* highest_priority_process = front(Ready_Queue);
+            if (highest_priority_process->priority < running_process->priority) {
+            
+                // Send SIGSTOP to running process
+                kill(running_process->pid, SIGSTOP);
+
+                // Update running process's state and remaining time
+                int current_time = getClk();
+                int elapsed_time = current_time - running_process->last_run;
+                running_process->remaining_time -= elapsed_time;
+                running_process->state = BLOCKED;
+
+             
+                Log_Process_Event(running_process, "stopped");
+
+                // Enqueue running process back to Ready Queue
+                enqueue(Ready_Queue, running_process);
+
+               
+                running_process = dequeue(Ready_Queue);
+                if (running_process->state == READY) {
+                    // Start the process
+                    int pid = fork();
+                    if (pid == 0) {
+                        // Child process
+                        char remaining_time_str[10];
+                        sprintf(remaining_time_str, "%d", running_process->remaining_time);
+                        execl("./process", "process", remaining_time_str, NULL);
+                        perror("Error executing process");
+                        exit(-1);
+                    } else if (pid < 0) {
+                        perror("Error in fork");
+                    } else {
+                        // Parent process
+                        running_process->pid = pid;
+                        running_process->state = RUNNING;
+                        running_process->start_time = getClk();
+                        running_process->last_run = getClk();
+                    
+
+                        // Log the process start
+                        Log_Process_Event(running_process, "started");
+                    }
+                } else if (running_process->state == BLOCKED) {
+                    // Resume the process
+                    kill(running_process->pid, SIGCONT);
+                    running_process->state = RUNNING;
+                    running_process->last_run = getClk();
+               
+
+                    // Log the process resume
+                    Log_Process_Event(running_process, "resumed");
+                }
+            }
+        }
+
+        // If no process is running
+       
+        
+        // Sleep to eeprevent busy waiting
+        sleep(1);
+       
+        
+    }
+}
+
+void SJF() {
+    while (finished_processes < process_count) {
+        if(running_process){
+            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        }
+        // Receive any new processes
+        PCB* current_p = Receive_process();
+        while (current_p) {
+            enqueue_SJF(Ready_Queue, current_p); 
+            current_p = Receive_process();
+        }
+
+        // Check for any ended processes
+        Check_Process_Termination();
+
+        // Start a new process 
+        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
+            int pid = fork();
+            if (pid == 0) {
+                // Child process
+                char remaining_time_str[10];
+                sprintf(remaining_time_str, "%d", running_process->remaining_time);
+                execl("./process", "process", remaining_time_str, NULL);
+                perror("Error executing process");
+                exit(-1);
+            } else if (pid < 0) {
+                perror("Error in fork");
+            } else {
+              
+                running_process->pid = pid;
+                running_process->state = RUNNING;
+                running_process->start_time = getClk();
+                running_process->last_run = getClk();
+                
+
+              
+                Log_Process_Event(running_process, "started");
+            }
+        }
+       
+
+      
+        sleep(1);
+    }
+}
+
+void RR(int quantum) {
+    while (finished_processes < process_count) {
+        if(running_process){
+            running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
+        }
+        // Receive any new processes
+        PCB* current_p = Receive_process();
+        while (current_p) {
+            enqueue_RR(Ready_Queue, current_p); // Enqueue in FCFS order
+            current_p = Receive_process();
+        }
+
+        // Check for any processes that have terminated
+        Check_Process_Termination();
+
+        int current_time = getClk();
+
+        // Check if time quantum has expired for the running process
+        if (running_process != NULL) {
+            int elapsed_time = current_time - running_process->last_run;
+            if (elapsed_time >= quantum) {
+                // Time quantum expired
+                // Stop the current running process
+                kill(running_process->pid, SIGSTOP);
+                // Update remaining time
+                running_process->remaining_time -= elapsed_time;
+                if (running_process->remaining_time > 0) {
+                     running_process->state = BLOCKED;
+                    // Re-enqueue the process
+                    enqueue_RR(Ready_Queue, running_process);
+                }
+
+                    // Log the process stop
+                    Log_Process_Event(running_process, "stopped");
+              
+                running_process = NULL;
+            }
+        }
+
+        // Start a new process if none is running
+        if (running_process == NULL && !isEmptyQ(Ready_Queue)) {
+            running_process = dequeue(Ready_Queue);
+            if (running_process->state == READY) {
+                // Start the process
+                int pid = fork();
+                if (pid == 0) {
+                    // Child process
+                    char remaining_time_str[10];
+                    sprintf(remaining_time_str, "%d", running_process->remaining_time);
+                    execl("./process", "process", remaining_time_str, NULL);
+                    perror("Error executing process");
+                    exit(-1);
+                } else if (pid < 0) {
+                    perror("Error in fork");
+                } else {
+                    // Parent process
+                    running_process->pid = pid;
+                    running_process->state = RUNNING;
+                    running_process->start_time = getClk();
+                    running_process->last_run = getClk();
+                    // printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
+
+                    // Log the process start
+                    Log_Process_Event(running_process, "started");
+                }
+            } else if (running_process->state == BLOCKED) {
+                // Resume the process
+                kill(running_process->pid, SIGCONT);
+                running_process->state = RUNNING;
+                running_process->last_run = getClk();
+                // printf("Process %d resumed at time %d.\n", running_process->pid, getClk());
+
+                // Log the process resume
+                Log_Process_Event(running_process, "resumed");
+            }
+        }
+        sleep(1);
+     
+
+    }
+}
+
