@@ -41,8 +41,8 @@ int main(int argc, char* argv[]) {
     fgets(buffer, sizeof(buffer), file); // Skip the first line again
     int count = 0;
 
-    while (fscanf(file, "%d\t%d\t%d\t%d", &procs[count].id, &procs[count].arrivaltime,
-                  &procs[count].runningtime, &procs[count].priority) == 4) {
+    while (fscanf(file, "%d\t%d\t%d\t%d\t%d", &procs[count].id, &procs[count].arrivaltime,
+                  &procs[count].runningtime, &procs[count].priority, &procs[count].size) == 5) {
         count++;
     }
     fclose(file);

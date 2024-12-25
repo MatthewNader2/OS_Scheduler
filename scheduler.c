@@ -10,7 +10,7 @@ int first_arr_proc;
 Queue* Ready_Queue;
 PCB* running_process = NULL;
 FILE* logfile;
-
+Node* root ;
 
 // Variables for performance 
 float total_runtime = 0;
@@ -54,7 +54,7 @@ void Log_Process_Event(PCB* process, const char* state) {
                 time, process->id, state, arr, total, remain, wait);
     }
 
-    fflush(logfile); // Ensure that the data is written to the file
+    fflush(logfile); 
 }
 
 void Check_Process_Termination() {
@@ -62,27 +62,25 @@ void Check_Process_Termination() {
     int rec_val = msgrcv(msgq_id, &message, sizeof(message) - sizeof(long), 5, IPC_NOWAIT);
 
     if (rec_val != -1) {
-        // Process has notified termination
-        // printf("Scheduler received termination message from process with PID %d.\n", message.pid);
-
+       
         if (running_process && running_process->pid == message.pid) {
-            // printf("Process %d has finished at time %d.\n", running_process->id, getClk());
+            
             running_process->state = FINISHED;
             running_process->remaining_time=0;
-            // Log the process finish
+           
             Log_Process_Event(running_process, "finished");
 
-            // Keep track of total TA and WTA for performance metrics
+           
             int TA = getClk() - running_process->arrival_time;
             float WTA = (float)TA / running_process->runtime;
             total_TA += TA;
             total_WTA += WTA;
             total_waiting_time += (running_process->start_time - running_process->arrival_time);
 
-            // For standard deviation of WTA
+            
             WTA_values[finished_processes] = WTA;
-
-            free(running_process); // Free the PCB memory
+            deallocate(root,running_process);
+            free(running_process); 
             running_process = NULL;
             finished_processes++;
         } else {
@@ -102,7 +100,7 @@ PCB* Receive_process() {
         if (received_processes==0){
             first_arr_proc=message.process.arrivaltime;
         }
-        // printf("%d\n", getClk());
+        
         received_processes++;
      
         rec_process->id = message.process.id;
@@ -114,16 +112,20 @@ PCB* Receive_process() {
         rec_process->remaining_time = message.process.runningtime;
         rec_process->start_time = -1;
         rec_process->last_run = -1;
+        rec_process->size=message.process.size;
+        total_runtime += message.process.runningtime; 
 
-        total_runtime += message.process.runningtime; // Accumulate total runtime
+        allocateMemoryWithSplit(root,rec_process->size,rec_process);
+        
+        
     } else {
-        free(rec_process); // Avoid memory leak
+        free(rec_process); 
         rec_process = NULL;
     }
     return rec_process;
 }
 
-// Function to round a float to two decimal places
+
 float Round(float var) {
     return ((int)(var * 100 + 0.5)) / 100.0;
 }
@@ -145,7 +147,7 @@ void ComputePerformanceMetrics() {
     float avg_waiting = (float)total_waiting_time / process_count;
     avg_waiting = Round(avg_waiting);
 
-    // Compute standard deviation of WTA
+   
     float sum_squared_diff = 0;
     for (int i = 0; i < process_count; i++) {
         float diff = WTA_values[i] - avg_WTA;
@@ -169,15 +171,16 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
+    root = createNode(1024,NULL);
+
     Ready_Queue = createQueue(100);
 
-    // Initialize clock
     initClk();
 
     int algorithm = atoi(argv[1]);
     process_count = atoi(argv[2]);
 
-    // Allocate memory for WTA_values
+    
     WTA_values = (float*)malloc(sizeof(float) * process_count);
     if (WTA_values == NULL) {
         perror("Error allocating memory for WTA_values");
@@ -218,8 +221,7 @@ int main(int argc, char* argv[]) {
             exit(-1);
     }
 
-    // // Wait for any remaining child processes
-    // while (wait(NULL) > 0);
+  
 
   
     ComputePerformanceMetrics();
@@ -270,16 +272,13 @@ void HPF() {
                 kill(running_process->pid, SIGCONT);
                 running_process->state = RUNNING;
                 running_process->last_run = getClk();
-                // printf("Process %d resumed at time %d, remaing time:%d\n", running_process->id, getClk(),running_process->remaining_time);
+                
 
                 // Log the process resume
                 Log_Process_Event(running_process, "resumed");
             }
         }
-        // if(running_process){
-        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        // }
-        // Receive any new processes
+        
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue(Ready_Queue, current_p); // Enqueue based on priority
@@ -347,24 +346,15 @@ void HPF() {
             }
         }
 
-        // If no process is running
-       
-        
-        // Sleep to eeprevent busy waiting
-        // sleep(1);
-       
+      
+  
         
     }
 }
 
 void SJF() {
     while (finished_processes < process_count) {
-        // if(running_process){
-        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        // }
-
-
-        // Receive any new processes
+       
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue_SJF(Ready_Queue, current_p); 
@@ -402,25 +392,20 @@ void SJF() {
        
 
       
-        // sleep(1);
+        
     }
 }
 
 void RR(int quantum) {
     while (finished_processes < process_count) {
-        // if(running_process){
-        //     running_process->remaining_time  = running_process->runtime - (getClk()-running_process->start_time+1);
-        // }
-
-
-        // Receive any new processes
+        
         PCB* current_p = Receive_process();
         while (current_p) {
             enqueue_RR(Ready_Queue, current_p); // Enqueue in FCFS order
             current_p = Receive_process();
         }
 
-        // Check for any processes that have terminated
+        
         Check_Process_Termination();
 
         int current_time = getClk();
@@ -429,8 +414,7 @@ void RR(int quantum) {
         if (running_process != NULL) {
             int elapsed_time = current_time - running_process->last_run;
             if (elapsed_time >= quantum) {
-                // Time quantum expired
-                // Stop the current running process
+                
                 kill(running_process->pid, SIGSTOP);
                 // Update remaining time
                 running_process->remaining_time -= elapsed_time;
@@ -468,9 +452,7 @@ void RR(int quantum) {
                     running_process->state = RUNNING;
                     running_process->start_time = getClk();
                     running_process->last_run = getClk();
-                    // printf("Process %d started with PID %d at time %d.\n", running_process->pid, pid, getClk());
-
-                    // Log the process start
+                   
                     Log_Process_Event(running_process, "started");
                 }
             } else if (running_process->state == BLOCKED) {
@@ -478,7 +460,7 @@ void RR(int quantum) {
                 kill(running_process->pid, SIGCONT);
                 running_process->state = RUNNING;
                 running_process->last_run = getClk();
-                // printf("Process %d resumed at time %d.\n", running_process->pid, getClk());
+                
 
                 // Log the process resume
                 Log_Process_Event(running_process, "resumed");
