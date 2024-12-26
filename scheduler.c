@@ -178,7 +178,7 @@ void Check_Process_Termination() {
 PCB* Receive_process() {
     process_msgbuff message;
     if(!isEmptyQ(Mem_Queue)&&ar_size!=0){
-        Queue * temp;
+        Queue * temp = createQueue(50);
         PCB * dec;
         PCB* te ;
         while (Mem_Queue->front)

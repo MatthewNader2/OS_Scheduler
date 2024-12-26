@@ -1,7 +1,7 @@
-At time 1 allocated 200 bytes for process 1 at block of size 256 start from 0 to 256
-At time 3 allocated 110 bytes for process 2 at block of size 128 start from 256 to 384
-At time 7 freed 200 bytes for process 1 at block of size 256 from 0 to 256
- At time 10 freed 110 bytes for process 2 at block of size 128 from 256 to 384
- At time 10 two blocks of size 128 has been merged in one block of size 256
-At time 10 two blocks of size 256 has been merged in one block of size 512
-At time 10 two blocks of size 512 has been merged in one block of size 1024
+At time 1 allocated 200 bytes for process 1 at block of size 256 start from 0 to 255
+At time 3 allocated 110 bytes for process 2 at block of size 128 start from 256 to 383
+At time 8 freed 200 bytes for process 1 at block of size 256 from 0 to 255
+ At time 11 freed 110 bytes for process 2 at block of size 128 from 256 to 383
+ At time 11 two blocks of size 128 has been merged in one block of size 256
+At time 11 two blocks of size 256 has been merged in one block of size 512
+At time 11 two blocks of size 512 has been merged in one block of size 1024

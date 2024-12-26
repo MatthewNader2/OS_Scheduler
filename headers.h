@@ -321,7 +321,7 @@ int remove_element(int arr[], int size, int element) {
 
 int search(int arr[], int size, int element) {
     for (int i = 0; i < size; i++) {
-        if (arr[i] == element) {
+        if (arr[i] >= element) {
             return i;  // Return index where element was found
         }
     }
