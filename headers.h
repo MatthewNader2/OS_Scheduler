@@ -22,8 +22,8 @@
 
 int ar_size=0;
 
-int max_size =100;
-int ar[100];
+int max_size =1000;
+int ar[1000];
 
 
 
@@ -358,7 +358,7 @@ Node* createNode(int size, PCB* pcb,int beg) {
     newNode->left = NULL;
     newNode->right = NULL;
     newNode->begin =beg;
-    size=add(ar,ar_size,size,max_size);
+    ar_size=add(ar,ar_size,size,max_size);
     return newNode;
 }
 

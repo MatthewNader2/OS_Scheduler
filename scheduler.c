@@ -96,9 +96,9 @@ void deallocate(Node* root, PCB* pcb) {
         root->left->left == NULL && root->right->right == NULL) {
         fprintf(MemFile, "At time %d two blocks of size %d has been merged in one block of size %d\n",
             getClk(), root->size/2,root->size);
-        ar_size=(ar,ar_size,root->left->size);
-        ar_size=(ar,ar_size,root->left->size);
-        
+        ar_size=remove_element(ar,ar_size,root->left->size);
+        ar_size=remove_element(ar,ar_size,root->left->size);
+        ar_size=add(ar,ar_size,root->size,max_size);
         free(root->left);
         free(root->right);
         root->left = NULL;
@@ -177,20 +177,24 @@ void Check_Process_Termination() {
 
 PCB* Receive_process() {
     process_msgbuff message;
-    if(!isEmptyQ(Mem_Queue)&&ar_size!=0){
+    
+    if(!isEmptyQ(Mem_Queue)){
         Queue * temp = createQueue(50);
         PCB * dec;
         PCB* te ;
+        bool T = true;
+        
         while (Mem_Queue->front)
         {
         
         te = dequeue(Mem_Queue);
-        bool T = true;
-        if(search(ar,ar_size,te->size)&& T){
+        
+        if(search(ar,ar_size,te->size)!=-1&& T){
             dec =te;
             allocateMemoryWithSplit(root,te->size,te);
             T =false;
-            break;
+            
+            continue;
         }
         else
         {
@@ -202,9 +206,12 @@ PCB* Receive_process() {
         {
             te =dequeue(temp);
             enqueue(Mem_Queue,te);
-
         }
+        free(temp);
+        if (T==false){
+            printf("\n");
         return dec;
+        }
     }
     PCB* rec_process = malloc(sizeof(PCB));
  
@@ -228,11 +235,13 @@ PCB* Receive_process() {
         rec_process->last_run = -1;
         rec_process->size=message.process.size;
         total_runtime += message.process.runningtime; 
-
-       if(!allocateMemoryWithSplit(root,rec_process->size,rec_process))
+       
+       if(search(ar,ar_size,rec_process->size)==-1)
         {
             enqueue(Mem_Queue,rec_process);
+            return NULL;
         }
+        allocateMemoryWithSplit(root,rec_process->size,rec_process);
         
     } else {
         free(rec_process); 
@@ -288,6 +297,8 @@ int main(int argc, char* argv[]) {
     }
 
     root = createNode(1024,NULL,0);
+
+
 
     Ready_Queue = createQueue(100);
     
