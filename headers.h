@@ -20,8 +20,10 @@
 
 
 
+int ar_size=0;
 
-
+int max_size =100;
+int ar[100];
 
 
 
@@ -285,10 +287,63 @@ PCB* rear(Queue* queue) {
 
 
 
+int add(int arr[], int size, int element, int max_size) {
+    if (size >= max_size) {
+        printf("Array is full\n");
+        return size;
+    }
+    arr[size] = element;
+    return size + 1;
+}
+
+// Remove first occurrence of element from array
+// Returns new size of array
+int remove_element(int arr[], int size, int element) {
+    int found = 0;
+    
+    // Find and remove first occurrence
+    for (int i = 0; i < size; i++) {
+        // Once we find the element
+        if (arr[i] == element && !found) {
+            found = 1;
+            // Shift remaining elements left
+            for (int j = i; j < size - 1; j++) {
+                arr[j] = arr[j + 1];
+            }
+            continue;
+        }
+    }
+    
+    // If we found and removed an element, decrease size
+    return found ? size - 1 : size;
+}
+
+
+int search(int arr[], int size, int element) {
+    for (int i = 0; i < size; i++) {
+        if (arr[i] == element) {
+            return i;  // Return index where element was found
+        }
+    }
+    return -1;  // Element not found
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 typedef struct Node {
+    int begin;
     int size;          // Size of the memory block
      PCB* pcb;   // Process occupying the block (NULL if free)
     struct Node* left; // Left buddy
@@ -296,12 +351,14 @@ typedef struct Node {
 } Node;
 
 // Function to create a new node
-Node* createNode(int size, PCB* pcb) {
+Node* createNode(int size, PCB* pcb,int beg) {
     Node* newNode = (Node*)malloc(sizeof(Node));
     newNode->size = size;
     newNode->pcb = pcb;
     newNode->left = NULL;
     newNode->right = NULL;
+    newNode->begin =beg;
+    size=add(ar,ar_size,size,max_size);
     return newNode;
 }
 
@@ -319,32 +376,6 @@ int roundUpToPowerOfTwo(int x) {
 }
 
 
-
-void deallocate(Node* root, PCB* pcb) {
-    
-    if (root == NULL) return;
-    
-    // If the block is occupied by the given PCB, deallocate it
-    if (root->pcb == pcb) {
-        printf("the process %d has deallocated %d\n",pcb->id,root->size);
-        root->pcb = NULL;
-        return;
-    }
-
-    // Recurse into left and right children
-    deallocate(root->left, pcb);
-    deallocate(root->right, pcb);
-
-    // Merge buddies if both are free
-    if (root->left && root->right &&
-        root->left->pcb == NULL && root->right->pcb == NULL &&
-        root->left->left == NULL && root->right->right == NULL) {
-        free(root->left);
-        free(root->right);
-        root->left = NULL;
-        root->right = NULL;
-    }
-}
 
 
 
@@ -384,72 +415,14 @@ void splitBlock(Node* block) {
     if (block == NULL || block->left != NULL || block->right != NULL) return;  // If already split or invalid node
 
     int halfSize = block->size / 2;
+    ar_size =remove_element(ar,ar_size,block->size);
 
     // Create left and right children (split the block)
-    block->left = createNode(halfSize,NULL);
-    block->right = createNode(halfSize,NULL);
+    block->left = createNode(halfSize,NULL,block->begin);
+    block->right = createNode(halfSize,NULL,block->begin+halfSize);
 
     printf("Block of size %d split into two blocks of size %d.\n", block->size, halfSize);
 }
-
-Node* allocateMemoryWithSplit(Node* root, int size, PCB*b) {
-    int roundedSize = roundUpToPowerOfTwo(size);  // Round the size up to the nearest power of 2
-    printf("Requesting %d bytes, rounded to %d bytes.\n", size, roundedSize);
-
-    // First, try to find an exact match for the requested size
-    Node* block = findFreeBlock(root, roundedSize);
-
-    // If we found a block of the exact size, allocate it
-    if (block != NULL && block->size == roundedSize) {
-        // Allocate the block by assigning a PCB
-        block->pcb =b ;
-        printf("The process %d has allocated memory %d\n",b->id,block->size);
-    
-        return block;
-    }
-    
-    // If no exact match, find a larger block and split it
-    if (block == NULL || block->size > roundedSize) {
-       
-
-        
-            // Split the larger block into smaller blocks
-            splitBlock(block);
-            // Allocate memory from the smaller blocks after splitting
-            return allocateMemoryWithSplit(root, size, b);
-            }
-            else {
-            // No suitable block available
-            printf("Memory allocation failed: No suitable block available.\n");
-            return NULL;
-                 }
-    
-
-    return NULL;  // Fallback if no suitable block was found
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

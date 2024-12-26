@@ -8,8 +8,10 @@ int finished_processes = 0;
 int process_count = 0;
 int first_arr_proc;
 Queue* Ready_Queue;
+Queue* Mem_Queue;
 PCB* running_process = NULL;
 FILE* logfile;
+FILE * MemFile;
 Node* root ;
 
 // Variables for performance 
@@ -24,6 +26,89 @@ float* WTA_values;
 void HPF();
 void SJF();
 void RR(int quantum);
+
+
+Node* allocateMemoryWithSplit(Node* root, int size, PCB*b) {
+    int roundedSize = roundUpToPowerOfTwo(size);  // Round the size up to the nearest power of 2
+    printf("Requesting %d bytes, rounded to %d bytes.\n", size, roundedSize);
+
+    // First, try to find an exact match for the requested size
+    Node* block = findFreeBlock(root, roundedSize);
+
+    // If we found a block of the exact size, allocate it
+    if (block != NULL && block->size == roundedSize) {
+        // Allocate the block by assigning a PCB
+        block->pcb =b ;
+
+        // printf("The process %d has allocated memory %d\n",b->id,block->size);
+
+        fprintf(MemFile, "At time %d allocated %d bytes for process %d at block of size %d start from %d to %d\n",
+                getClk(), b->size , b->id,block->size,block->begin,block->begin+block->size-1);
+
+        ar_size=remove_element(ar,ar_size,block->size);
+
+        return block;
+    }
+    
+    // If no exact match, find a larger block and split it
+    if (block == NULL || block->size > roundedSize) {
+       
+
+        
+            // Split the larger block into smaller blocks
+            splitBlock(block);
+            // Allocate memory from the smaller blocks after splitting
+            return allocateMemoryWithSplit(root, size, b);
+            }
+            else {
+            // No suitable block available
+            printf("Memory allocation failed: No suitable block available.\n");
+            return NULL;
+                 }
+    
+
+    return NULL;  // Fallback if no suitable block was found
+}
+
+
+void deallocate(Node* root, PCB* pcb) {
+    
+    if (root == NULL) return;
+    
+    // If the block is occupied by the given PCB, deallocate it
+    if (root->pcb == pcb) {
+        printf("the process %d has deallocated %d\n",pcb->id,root->size);
+        fprintf(MemFile, "At time %d freed %d bytes for process %d at block of size %d from %d to %d\n ",
+            getClk(), pcb->size , pcb->id,root->size,root->begin,root->size + root->begin-1);
+
+        ar_size = add(ar,ar_size,root->size,max_size);
+        root->pcb = NULL;
+        return;
+    }
+
+    // Recurse into left and right children
+    deallocate(root->left, pcb);
+    deallocate(root->right, pcb);
+
+    // Merge buddies if both are free
+    if (root->left && root->right &&
+        root->left->pcb == NULL && root->right->pcb == NULL &&
+        root->left->left == NULL && root->right->right == NULL) {
+        fprintf(MemFile, "At time %d two blocks of size %d has been merged in one block of size %d\n",
+            getClk(), root->size/2,root->size);
+        ar_size=(ar,ar_size,root->left->size);
+        ar_size=(ar,ar_size,root->left->size);
+        
+        free(root->left);
+        free(root->right);
+        root->left = NULL;
+        root->right = NULL;
+    }
+}
+
+
+
+
 
 void CreateMessageQueue() {
     key_t keyid = ftok("keyfile", 65);
@@ -92,6 +177,35 @@ void Check_Process_Termination() {
 
 PCB* Receive_process() {
     process_msgbuff message;
+    if(!isEmptyQ(Mem_Queue)&&ar_size!=0){
+        Queue * temp;
+        PCB * dec;
+        PCB* te ;
+        while (Mem_Queue->front)
+        {
+        
+        te = dequeue(Mem_Queue);
+        bool T = true;
+        if(search(ar,ar_size,te->size)&& T){
+            dec =te;
+            allocateMemoryWithSplit(root,te->size,te);
+            T =false;
+            break;
+        }
+        else
+        {
+            enqueue(temp,te);
+        }
+
+        }
+        while (temp->front)
+        {
+            te =dequeue(temp);
+            enqueue(Mem_Queue,te);
+
+        }
+        return dec;
+    }
     PCB* rec_process = malloc(sizeof(PCB));
  
     int rec_val = msgrcv(msgq_id, &message, sizeof(message.process), 1, IPC_NOWAIT);
@@ -115,8 +229,10 @@ PCB* Receive_process() {
         rec_process->size=message.process.size;
         total_runtime += message.process.runningtime; 
 
-        allocateMemoryWithSplit(root,rec_process->size,rec_process);
-        
+       if(!allocateMemoryWithSplit(root,rec_process->size,rec_process))
+        {
+            enqueue(Mem_Queue,rec_process);
+        }
         
     } else {
         free(rec_process); 
@@ -171,9 +287,11 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
-    root = createNode(1024,NULL);
+    root = createNode(1024,NULL,0);
 
     Ready_Queue = createQueue(100);
+    
+    Mem_Queue = createQueue(50);
 
     initClk();
 
@@ -199,6 +317,7 @@ int main(int argc, char* argv[]) {
     CreateMessageQueue();
 
     // Open log file
+    MemFile =fopen("Memeory.log","w");
     logfile = fopen("scheduler.log", "w");
     if (!logfile) {
         perror("Error opening log file");
@@ -228,6 +347,7 @@ int main(int argc, char* argv[]) {
     printf("The Scheduling is ended..\n");
     // Cleaning
     fclose(logfile);
+    fclose(MemFile);
     free(WTA_values);
     // Clean up message queue
     msgctl(msgq_id, IPC_RMID, NULL);
@@ -387,6 +507,7 @@ void SJF() {
 
               
                 Log_Process_Event(running_process, "started");
+                
             }
         }
        
